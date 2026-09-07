@@ -408,6 +408,11 @@ func broadcastWs(v interface{}) {
 	}
 }
 
+type BatchItem struct {
+	Acc Account
+	Idx int
+}
+
 func launchAllAccountsRealtime(chatId int64, messageId int) {
 	dbMutex.Lock()
 	session, exists := userData[chatId]
@@ -427,39 +432,26 @@ func launchAllAccountsRealtime(chatId int64, messageId int) {
 	}
 	activeAutoPlayMutex.Unlock()
 
-	type Item struct {
-		Acc Account
-		Idx int
-	}
-	var queue []Item
+	var queue []BatchItem
 	for idx, acc := range accounts {
-		queue = append(queue, Item{Acc: acc, Idx: idx})
+		queue = append(queue, BatchItem{Acc: acc, Idx: idx})
 	}
 
 	go processNextBatch(chatId, queue)
 }
 
-func processNextBatch(chatId int64, queue []struct {
-	Acc Account
-	Idx int
-}) {
+func processNextBatch(chatId int64, queue []BatchItem) {
 	if len(queue) == 0 {
 		return
 	}
 
-	var batch []struct {
-		Acc Account
-		Idx int
-	}
+	var batch []BatchItem
 	if len(queue) > MaxWorkers {
 		batch = queue[:MaxWorkers]
 		queue = queue[MaxWorkers:]
 	} else {
 		batch = queue
-		queue = []struct {
-			Acc Account
-			Idx int
-		}{}
+		queue = []BatchItem{}
 	}
 
 	var wg sync.WaitGroup
