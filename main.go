@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	BotToken   = "8858982169:AAGFivSsTN74KhAiK_CEsbtCZb6IufU7MDk"
+	BotToken   = "8600466949:AAHlDM_-5wF1wiOWCd-NvryKZS8gIc1cK7w"
 	Port       = ":3000"
 	DataFile   = "user_data.json"
 	AnsDbFile  = "answers_db.json"
