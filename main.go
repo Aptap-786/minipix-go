@@ -1,3 +1,5 @@
+// File Name: main.go
+
 package main
 
 import (
@@ -5,7 +7,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math/rand"
 	"net/http"
 	"os"
@@ -19,10 +20,10 @@ import (
 )
 
 const (
-	BotToken    = "8903711831:AAEvJXh-sEMBYGx-sSax-wdflzgQIm56vg8"
-	DataFile    = "user_data.json"
-	AnsDbFile   = "answers_db.json"
-	MaxWorkers  = 10
+	BotToken   = "8903711831:AAEvJXh-sEMBYGx-sSax-wdflzgQIm56vg8"
+	DataFile   = "user_data.json"
+	AnsDbFile  = "answers_db.json"
+	MaxWorkers = 10
 )
 
 var userAgents = []string{
@@ -41,17 +42,17 @@ type Account struct {
 }
 
 type UserSession struct {
-	Accounts      []Account       `json:"accounts"`
-	ActiveIndex   int             `json:"active_index"`
-	TempAcc       *Account        `json:"temp_acc,omitempty"`
-	TempRetry     *Account        `json:"temp_retry,omitempty"`
-	QuizSessionID string          `json:"quiz_session_id,omitempty"`
-	CurrentQID    string          `json:"current_question_id,omitempty"`
-	CurrentOpts   []interface{}   `json:"current_options,omitempty"`
+	Accounts      []Account     `json:"accounts"`
+	ActiveIndex   int           `json:"active_index"`
+	TempAcc       *Account      `json:"temp_acc,omitempty"`
+	TempRetry     *Account      `json:"temp_retry,omitempty"`
+	QuizSessionID string        `json:"quiz_session_id,omitempty"`
+	CurrentQID    string        `json:"current_question_id,omitempty"`
+	CurrentOpts   []interface{} `json:"current_options,omitempty"`
 }
 
 type TgRequest struct {
-	Action    string // "send" or "edit"
+	Action    string
 	ChatId    int64
 	MessageId int
 	Text      string
@@ -76,7 +77,6 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-// Telegram Rate Limiter to prevent flood errors
 func initTelegramRateLimiter() {
 	ticker := time.NewTicker(350 * time.Millisecond)
 	for range ticker.C {
@@ -151,9 +151,9 @@ func escapeHtml(text string) string {
 }
 
 var baseHeaders = map[string]string{
-	"Host":           "api.minipix.co",
-	"content-type":   "application/json; charset=utf-8",
-	"user-agent":     "okhttp/4.12.0",
+	"Host":            "api.minipix.co",
+	"content-type":    "application/json; charset=utf-8",
+	"user-agent":      "okhttp/4.12.0",
 	"accept-encoding": "gzip",
 }
 
@@ -925,8 +925,7 @@ func startTelegramPolling() {
 	offset := 0
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	// We can track pending states for text inputs per chat
-	pendingState := make(map[string]string) // "chatId_phone" or "chatId_otp" or "chatId_token"
+	pendingState := make(map[string]string)
 
 	for {
 		url := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?offset=%d&timeout=25", BotToken, offset)
