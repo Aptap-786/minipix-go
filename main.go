@@ -1089,7 +1089,7 @@ func main() {
 	loadData()
 
 	go initTelegramRateLimiter()
-	go startTelegramPolling()
+	go startTelegramPolling() // <--- Telegram polling thread successfully initialized here
 
 	r := gin.Default()
 
