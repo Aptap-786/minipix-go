@@ -916,8 +916,9 @@ func processAccessTokenStep(chatId int64, token string) {
 func startTelegramPolling() {
 	offset := 0
 	client := &http.Client{Timeout: 30 * time.Second}
-
 	pendingState := make(map[string]string)
+
+	fmt.Println("🤖 Telegram Long Polling Engine Started Successfully...")
 
 	for {
 		url := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?offset=%d&timeout=25", BotToken, offset)
@@ -1089,7 +1090,7 @@ func main() {
 	loadData()
 
 	go initTelegramRateLimiter()
-	go startTelegramPolling() // <--- Telegram polling thread successfully initialized here
+	go startTelegramPolling() // Triggering long polling loop
 
 	r := gin.Default()
 
