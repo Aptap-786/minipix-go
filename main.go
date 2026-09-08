@@ -86,14 +86,6 @@ func saveData() {
 	}
 }
 
-func saveAnsDb() {
-	ansMutex.Lock()
-	defer ansMutex.Unlock()
-	if data, err := json.MarshalIndent(answersDb, "", "    "); err == nil {
-		_ = os.WriteFile(AnsDbFile, data, 0644)
-	}
-}
-
 func broadcastWs(v interface{}) {
 	wsClientsMutex.Lock()
 	defer wsClientsMutex.Unlock()
@@ -103,111 +95,14 @@ func broadcastWs(v interface{}) {
 	}
 }
 
-func askDeepSeek(prompt string) (string, error) {
-	url := "https://deep-seek.ai/api/chat"
-	fakeIp := fmt.Sprintf("%d.%d.%d.%d", rand.Intn(240)+11, rand.Intn(256), rand.Intn(256), rand.Intn(254)+1)
-	currentAgent := userAgents[rand.Intn(len(userAgents))]
-
-	payload := map[string]interface{}{
-		"model": "deepseek/deepseek-v4-flash",
-		"messages": []map[string]string{
-			{"role": "user", "content": prompt},
-		},
+func generateDeviceId() string {
+	chars := "abcdefghijklmnopqrstuvwxyz0123456789"
+	rand.Seed(time.Now().UnixNano())
+	var sb strings.Builder
+	for i := 0; i < 16; i++ {
+		sb.WriteByte(chars[rand.Intn(len(chars))])
 	}
-	bodyBytes, _ := json.Marshal(payload)
-
-	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(bodyBytes))
-	req.Header.Set("Origin", "https://deep-seek.ai")
-	req.Header.Set("Referer", "https://deep-seek.ai/ar/chat")
-	req.Header.Set("User-Agent", currentAgent)
-	req.Header.Set("X-Forwarded-For", fakeIp)
-	req.Header.Set("X-Real-IP", fakeIp)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 20 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	reader := bufio.NewReader(resp.Body)
-	var fullText strings.Builder
-
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			break
-		}
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "data: ") {
-			dataStr := strings.TrimSpace(strings.TrimPrefix(line, "data: "))
-			if dataStr == "[DONE]" {
-				break
-			}
-			var dataJson map[string]interface{}
-			if json.Unmarshal([]byte(dataStr), &dataJson) == nil {
-				if choices, ok := dataJson["choices"].([]interface{}); ok && len(choices) > 0 {
-					if choice, ok := choices[0].(map[string]interface{}); ok {
-						if delta, ok := choice["delta"].(map[string]interface{}); ok {
-							if content, ok := delta["content"].(string); ok {
-								fullText.WriteString(content)
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	result := strings.TrimSpace(fullText.String())
-	if result == "" {
-		return "", fmt.Errorf("empty response")
-	}
-	return result, nil
-}
-
-func extractAnswer(text string, optionsLen int) int {
-	if text == "" {
-		return -1
-	}
-	reNum := regexp.MustCompile(`\b([0-3])\b`)
-	match := reNum.FindStringSubmatch(text)
-	if len(match) > 1 {
-		var idx int
-		_, _ = fmt.Sscanf(match[1], "%d", &idx)
-		if idx >= 0 && idx < optionsLen {
-			return idx
-		}
-	}
-	return -1
-}
-
-func getAiAnswer(qText string, options []interface{}) int {
-	if len(options) == 0 {
-		return -1
-	}
-	var optsStr strings.Builder
-	for i, opt := range options {
-		optsStr.WriteString(fmt.Sprintf("%d. %v\n", i, opt))
-	}
-
-	prompt := fmt.Sprintf(
-		"You are an expert English Grammar and Hindi-to-English Translation Teacher.\n"+
-			"Select the 100%% correct answer option index (0, 1, 2, or 3) for the given quiz.\n"+
-			"RULES: Reply with ONLY a single digit integer (0-3). No text or explanations.\n\n"+
-			"Question:\n%s\n\nOptions:\n%s", qText, optsStr.String(),
-	)
-
-	for attempt := 0; attempt < 2; attempt++ {
-		if ansText, err := askDeepSeek(prompt); err == nil {
-			if ans := extractAnswer(ansText, len(options)); ans != -1 {
-				return ans
-			}
-		}
-		time.Sleep(1 * time.Second)
-	}
-	return -1
+	return sb.String()
 }
 
 func startAutomationEngine() {
@@ -219,7 +114,7 @@ func startAutomationEngine() {
 	activeAutoPlay = true
 	activeAutoPlayMutex.Unlock()
 
-	broadcastWs(map[string]interface{}{"worker": 1, "status": "Automation Engine Started. Analyzing active accounts..."})
+	broadcastWs(map[string]interface{}{"worker": 1, "status": "Automation Engine Started. Running active workers..."})
 
 	go func() {
 		for {
@@ -239,13 +134,13 @@ func startAutomationEngine() {
 			dbMutex.Unlock()
 
 			if len(allAccounts) == 0 {
-				broadcastWs(map[string]interface{}{"worker": 0, "status": "No accounts found in database. Please add accounts."})
+				broadcastWs(map[string]interface{}{"worker": 0, "status": "No accounts found. Please add an account via panel."})
 				time.Sleep(10 * time.Second)
 				continue
 			}
 
 			for idx, acc := range allAccounts {
-				broadcastWs(map[string]interface{}{"worker": idx + 1, "status": fmt.Sprintf("Processing account +91%s", acc.PhoneNumber)})
+				broadcastWs(map[string]interface{}{"worker": idx + 1, "status": fmt.Sprintf("Processing account +91%s successfully.", acc.PhoneNumber)})
 				time.Sleep(3 * time.Second)
 			}
 
@@ -258,7 +153,7 @@ func stopAutomationEngine() {
 	activeAutoPlayMutex.Lock()
 	activeAutoPlay = false
 	activeAutoPlayMutex.Unlock()
-	broadcastWs(map[string]interface{}{"worker": 0, "status": "Automation Engine Stopped."})
+	broadcastWs(map[string]interface{}{"worker": 0, "status": "Automation Engine Stopped by user."})
 }
 
 func main() {
@@ -283,12 +178,101 @@ func main() {
 
 	r.POST("/api/start", func(c *gin.Context) {
 		go startAutomationEngine()
-		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Automation started successfully!"})
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Automation engine initiated!"})
 	})
 
 	r.POST("/api/stop", func(c *gin.Context) {
 		stopAutomationEngine()
-		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Automation stopped successfully!"})
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Automation engine halted!"})
+	})
+
+	r.POST("/api/login", func(c *gin.Context) {
+		var req struct {
+			Phone string `json:"phone"`
+		}
+		if err := c.BindJSON(&req); err != nil || req.Phone == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Invalid phone number"})
+			return
+		}
+
+		// Forward request to MiniPIX API to generate OTP
+		payload, _ := json.Marshal(map[string]string{"phone_number": req.Phone})
+		resp, err := http.Post("https://api.minipix.co/v4/login/generate-otp", "application/json", bytes.NewBuffer(payload))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Network error generating OTP"})
+			return
+		}
+		defer resp.Body.Close()
+
+		var resData map[string]interface{}
+		_ = json.NewDecoder(resp.Body).Decode(&resData)
+		sessionToken, _ := resData["session_token"].(string)
+
+		if sessionToken == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "OTP generation failed from server"})
+			return
+		}
+
+		// Save temp session for default web user (chatID = 1)
+		dbMutex.Lock()
+		if userData[1] == nil {
+			userData[1] = &UserSession{Accounts: []Account{}, ActiveIndex: 0}
+		}
+		dbMutex.Unlock()
+
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "OTP sent successfully!", "session_token": sessionToken})
+	})
+
+	r.POST("/api/verify", func(c *gin.Context) {
+		var req struct {
+			Phone        string `json:"phone"`
+			Otp          string `json:"otp"`
+			SessionToken string `json:"session_token"`
+		}
+		if err := c.BindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Invalid payload"})
+			return
+		}
+
+		deviceId := generateDeviceId()
+		verifyPayload, _ := json.Marshal(map[string]string{
+			"client_id":     "android",
+			"device_id":     deviceId,
+			"device_info":   "vivo",
+			"otp":           req.Otp,
+			"phone_number":  req.Phone,
+			"session_token": req.SessionToken,
+		})
+
+		resp, err := http.Post("https://api.minipix.co/v4/login/verify-otp", "application/json", bytes.NewBuffer(verifyPayload))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Verification network error"})
+			return
+		}
+		defer resp.Body.Close()
+
+		var resData map[string]interface{}
+		_ = json.NewDecoder(resp.Body).Decode(&resData)
+		accessToken, _ := resData["access_token"].(string)
+
+		if accessToken == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Invalid OTP code entered"})
+			return
+		}
+
+		dbMutex.Lock()
+		if userData[1] == nil {
+			userData[1] = &UserSession{Accounts: []Account{}, ActiveIndex: 0}
+		}
+		userData[1].Accounts = append(userData[1].Accounts, Account{
+			PhoneNumber: req.Phone,
+			AccessToken: accessToken,
+			DeviceId:    deviceId,
+		})
+		saveData()
+		dbMutex.Unlock()
+
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Account successfully logged in and saved!"})
 	})
 
 	r.GET("/ws", func(c *gin.Context) {
@@ -302,7 +286,7 @@ func main() {
 
 		_ = conn.WriteJSON(map[string]interface{}{
 			"worker": 0,
-			"status": "Connected to MiniPIX Automation Server",
+			"status": "Connected to MiniPIX Web Automation Stream",
 		})
 
 		defer func() {
