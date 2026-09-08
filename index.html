@@ -1,21 +1,19 @@
-<!-- File Name: index.html -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniPIX Pro Control Panel</title>
+    <title>MiniPIX Pro Web Automation Dashboard</title>
     <style>
         :root {
-            --bg-color: #090d16;
-            --card-bg: #111827;
-            --border-color: #1f2937;
+            --bg-color: #0b0f19;
+            --card-bg: #131b2e;
+            --border-color: #1e293b;
             --accent: #38bdf8;
             --success: #22c55e;
             --danger: #ef4444;
-            --text-main: #f3f4f6;
-            --text-muted: #9ca3af;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Inter', system-ui, sans-serif; background-color: var(--bg-color); color: var(--text-main); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
@@ -28,36 +26,36 @@
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
         
         .grid-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-        .btn { padding: 10px; border: none; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; color: white; background: #1e293b; border: 1px solid var(--border-color); text-align: center; }
-        .btn:hover { background: #334155; }
-        .btn-start { background: var(--success); border: none; }
-        .btn-stop { background: var(--danger); border: none; }
-        .btn-full { grid-column: span 2; background: #0284c7; border: none; }
+        .btn { padding: 12px; border: none; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; color: white; text-align: center; }
+        .btn-start { background: var(--success); }
+        .btn-stop { background: var(--danger); }
+        .btn-login { grid-column: span 2; background: #0284c7; }
+        .btn:hover { opacity: 0.9; }
 
         .section-title { font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
-        .terminal { background: #030712; border: 1px solid var(--border-color); border-radius: 10px; padding: 12px; height: 220px; overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 12px; color: #38bdf8; display: flex; flex-direction: column; gap: 6px; }
+        .terminal { background: #04060c; border: 1px solid var(--border-color); border-radius: 10px; padding: 12px; height: 240px; overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 12px; color: #38bdf8; display: flex; flex-direction: column; gap: 6px; }
         .footer { margin-top: 15px; text-align: center; font-size: 11px; color: var(--text-muted); }
     </style>
 </head>
 <body>
     <div class="dashboard">
         <div class="header">
-            <h1>MiniPIX Web Control Panel</h1>
+            <h1>MiniPIX Pro Control Panel</h1>
             <div id="status-badge" class="badge">
                 <span class="dot"></span> <span id="status-text">Disconnected</span>
             </div>
         </div>
 
         <div class="grid-controls">
-            <button class="btn btn-start" onclick="triggerAction('start')">🚀 Start Auto-Play</button>
-            <button class="btn btn-stop" onclick="triggerAction('stop')">🛑 Stop Engine</button>
-            <button class="btn btn-full" onclick="promptLogin()">📱 Login / Add Account via Phone</button>
+            <button class="btn btn-start" onclick="sendAction('start')">🚀 Start Auto-Play</button>
+            <button class="btn btn-stop" onclick="sendAction('stop')">🛑 Stop Engine</button>
+            <button class="btn btn-login" onclick="startLoginProcess()">📱 Login / Add Account via Phone</button>
         </div>
 
         <div>
             <div class="section-title">Live Execution & Worker Activity Logs</div>
             <div id="terminal-logs" class="terminal">
-                <div>[System] Web Dashboard initialized successfully.</div>
+                <div>[System] Dashboard initialized successfully. Connecting...</div>
             </div>
         </div>
 
@@ -95,18 +93,56 @@
             }
         };
 
-        function triggerAction(action) {
+        function sendAction(action) {
             fetch(`/api/${action}`, { method: 'POST' })
                 .then(res => res.json())
-                .then(data => appendLog('API', data.message || 'Action executed'))
+                .then(data => appendLog('API', data.message))
                 .catch(err => appendLog('Error', 'Request failed'));
         }
 
-        function promptLogin() {
+        async function startLoginProcess() {
             const phone = prompt("Enter your 10-digit mobile number (+91):");
-            if (phone) {
-                appendLog('Auth', `Requesting OTP for +91${phone}...`);
-                // Aap yahan backend API call add kar sakte hain jo OTP generate karegi
+            if (!phone) return;
+
+            appendLog('Auth', `Requesting OTP for +91${phone}...`);
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    appendLog('Auth', data.message);
+                    const otp = prompt("Enter the received OTP code:");
+                    if (otp) {
+                        verifyOtp(phone, otp, data.session_token);
+                    }
+                } else {
+                    appendLog('Error', data.message);
+                }
+            } catch (e) {
+                appendLog('Error', 'OTP generation request failed.');
+            }
+        }
+
+        async function verifyOtp(phone, otp, sessionToken) {
+            appendLog('Auth', 'Verifying OTP code...');
+            try {
+                const res = await fetch('/api/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone, otp, session_token: sessionToken })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    appendLog('Success', data.message);
+                } else {
+                    appendLog('Error', data.message);
+                }
+            } catch (e) {
+                appendLog('Error', 'OTP verification request failed.');
             }
         }
 
