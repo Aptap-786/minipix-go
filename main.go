@@ -3,14 +3,12 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -24,11 +22,6 @@ const (
 	AnsDbFile  = "answers_db.json"
 	MaxWorkers = 10
 )
-
-var userAgents = []string{
-	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15",
-}
 
 type Account struct {
 	PhoneNumber  string `json:"phone_number"`
@@ -195,7 +188,6 @@ func main() {
 			return
 		}
 
-		// Forward request to MiniPIX API to generate OTP
 		payload, _ := json.Marshal(map[string]string{"phone_number": req.Phone})
 		resp, err := http.Post("https://api.minipix.co/v4/login/generate-otp", "application/json", bytes.NewBuffer(payload))
 		if err != nil {
@@ -213,7 +205,6 @@ func main() {
 			return
 		}
 
-		// Save temp session for default web user (chatID = 1)
 		dbMutex.Lock()
 		if userData[1] == nil {
 			userData[1] = &UserSession{Accounts: []Account{}, ActiveIndex: 0}
