@@ -1,3 +1,5 @@
+// File Name: go.mod
+
 module minipix-go
 
 go 1.22
