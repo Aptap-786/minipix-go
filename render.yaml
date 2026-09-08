@@ -1,15 +1,7 @@
 services:
   - type: web
-    name: minipix-express
+    name: minipix
     env: rust
     buildCommand: cargo build --release
     startCommand: ./target/release/minipix
-    envVars:
-      - key: PORT
-        value: 3000
-      - key: RUST_LOG
-        value: info
-    disk:
-      name: minipix-data
-      mountPath: /data
-      sizeGB: 1
+    plan: free
