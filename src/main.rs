@@ -7,8 +7,10 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use cbc::cipher::{BlockDecryptMut, KeyIvInit};
 use dashmap::DashMap;
 use rand::Rng;
+use regex::Regex;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -22,6 +24,9 @@ use std::{
 use tokio::sync::broadcast;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info};
+
+// AES-128-CBC decryptor type alias (for Claude Sonnet challenge)
+type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -63,7 +68,7 @@ struct UserEntry {
 struct WorkerStatus {
     worker_id: usize,
     phone: String,
-    status: String,       // "idle" | "running" | "stopped" | "analyzing" | "submitting"
+    status: String, // "idle" | "running" | "stopped" | "analyzing" | "submitting"
     correct: u32,
     wrong: u32,
     current_question: Option<String>,
@@ -118,15 +123,10 @@ struct ManualStartReq {
 #[derive(Clone)]
 struct AppState {
     client: Client,
-    // user_data: session_id → UserEntry (in-memory; persisted to file)
     user_data: Arc<DashMap<String, UserEntry>>,
-    // answers_db: question_key → correct_answer_text
     answers_db: Arc<DashMap<String, String>>,
-    // active_workers: (session_id, worker_idx) → running bool
     active_workers: Arc<DashMap<(String, usize), bool>>,
-    // worker_statuses: session_id → Vec<WorkerStatus>
     worker_statuses: Arc<DashMap<String, Vec<WorkerStatus>>>,
-    // websocket broadcast
     ws_tx: broadcast::Sender<String>,
 }
 
@@ -136,6 +136,7 @@ impl AppState {
         let state = Self {
             client: Client::builder()
                 .timeout(Duration::from_secs(20))
+                .cookie_store(true)
                 .build()
                 .unwrap(),
             user_data: Arc::new(DashMap::new()),
@@ -229,11 +230,27 @@ fn build_auth_headers(token: &str) -> HashMap<String, String> {
     map
 }
 
+// ─── Extract Answer — Python exact match ─────────────────────────────────────
+// Python:
+//   re.search(r'\b([0-3])\b', text)  → word-boundary digit first
+//   re.findall(r'\d+', text)          → any number fallback
 fn extract_answer(text: &str, opts_len: usize) -> Option<usize> {
-    // Try single digit 0-3
-    for ch in text.chars() {
-        if let Some(d) = ch.to_digit(10) {
-            let idx = d as usize;
+    if text.is_empty() {
+        return None;
+    }
+    // Try word-boundary single digit 0-3 first (same as Python \b([0-3])\b)
+    let re_wb = Regex::new(r"\b([0-3])\b").unwrap();
+    if let Some(cap) = re_wb.captures(text) {
+        if let Ok(idx) = cap[1].parse::<usize>() {
+            if idx < opts_len {
+                return Some(idx);
+            }
+        }
+    }
+    // Fallback: find any digit sequence (same as Python re.findall(r'\d+', text))
+    let re_any = Regex::new(r"\d+").unwrap();
+    for m in re_any.find_iter(text) {
+        if let Ok(idx) = m.as_str().parse::<usize>() {
             if idx < opts_len {
                 return Some(idx);
             }
@@ -264,6 +281,10 @@ async fn ask_deepseek(client: &Client, prompt: &str) -> anyhow::Result<String> {
         .send()
         .await?;
 
+    if !resp.status().is_success() {
+        anyhow::bail!("DeepSeek returned status {}", resp.status());
+    }
+
     let body = resp.text().await?;
     let mut full = String::new();
 
@@ -282,46 +303,158 @@ async fn ask_deepseek(client: &Client, prompt: &str) -> anyhow::Result<String> {
     }
 
     if full.trim().is_empty() {
-        anyhow::bail!("empty response from DeepSeek");
+        anyhow::bail!("DeepSeek returned empty response");
     }
     Ok(full.trim().to_string())
 }
 
+// ─── Claude Sonnet Bypass — AES-CBC Challenge (Python exact port) ─────────────
+// Python logic:
+//   1. GET ?text=prompt
+//   2. If "choices" in body → parse JSON directly
+//   3. Else: extract toNumbers("hex") x3 → key, iv, ciphertext
+//   4. AES-128-CBC decrypt → test_cookie (hex)
+//   5. GET again with Cookie: __test=<hex>
+//   6. Parse JSON response
+async fn ask_claude_sonnet(client: &Client, prompt: &str) -> anyhow::Result<String> {
+    let url = "https://codevyx.free.nf/lego/Claude-Sonnet-4.5.php";
+    let ip = fake_ip();
+    let agent = random_user_agent();
+
+    // Step 1: First GET
+    let r1 = client
+        .get(url)
+        .query(&[("text", prompt)])
+        .header("User-Agent", agent)
+        .header("X-Forwarded-For", &ip)
+        .header("X-Real-IP", &ip)
+        .send()
+        .await?;
+
+    let body1 = r1.text().await?;
+
+    // Step 2: If direct JSON response
+    if body1.contains("choices") {
+        if let Ok(v) = serde_json::from_str::<Value>(&body1) {
+            if let Some(content) = v["choices"][0]["message"]["content"].as_str() {
+                return Ok(content.to_string());
+            }
+        }
+    }
+
+    // Step 3: Extract toNumbers("...") — key, iv, ciphertext
+    let re = Regex::new(r#"toNumbers\("([0-9a-fA-F]+)"\)"#).unwrap();
+    let matches: Vec<String> = re
+        .captures_iter(&body1)
+        .filter_map(|c| c.get(1).map(|m| m.as_str().to_string()))
+        .collect();
+
+    if matches.len() < 3 {
+        anyhow::bail!("Sonnet challenge failed: only {} toNumbers matches found", matches.len());
+    }
+
+    let key_bytes = hex::decode(&matches[0])?;
+    let iv_bytes = hex::decode(&matches[1])?;
+    let cipher_bytes = hex::decode(&matches[2])?;
+
+    // Step 4: AES-128-CBC decrypt (NoPadding, same as Python pycryptodome default)
+    let mut buf = cipher_bytes.clone();
+    let decryptor = Aes128CbcDec::new_from_slices(&key_bytes, &iv_bytes)
+        .map_err(|e| anyhow::anyhow!("AES init failed: {:?}", e))?;
+    let decrypted = decryptor
+        .decrypt_padded_mut::<cbc::cipher::block_padding::NoPadding>(&mut buf)
+        .map_err(|e| anyhow::anyhow!("AES decrypt failed: {:?}", e))?;
+    let test_cookie = hex::encode(decrypted);
+
+    // Step 5: Second GET with __test cookie
+    let r2 = client
+        .get(url)
+        .query(&[("text", prompt)])
+        .header("User-Agent", agent)
+        .header("X-Forwarded-For", &ip)
+        .header("X-Real-IP", &ip)
+        .header("Cookie", format!("__test={}", test_cookie))
+        .send()
+        .await?;
+
+    let body2 = r2.text().await?;
+
+    // Step 6: Parse final JSON
+    if let Ok(v) = serde_json::from_str::<Value>(&body2) {
+        if let Some(content) = v["choices"][0]["message"]["content"].as_str() {
+            return Ok(content.to_string());
+        }
+    }
+
+    // Fallback: return raw text if JSON parse fails
+    if body2.trim().is_empty() {
+        anyhow::bail!("Sonnet returned empty response");
+    }
+    Ok(body2.trim().to_string())
+}
+
+// ─── AI Answer Engine — Python exact match ────────────────────────────────────
+// Python:
+//   max_retries = 2
+//   for attempt in range(max_retries):
+//       try DeepSeek → if answer: return it
+//       try Claude Sonnet → if answer: return it
+//       time.sleep(1.5)
+//   return -1
 async fn get_ai_answer(client: &Client, q_hi: &str, q_en: &str, options: &[Value]) -> i64 {
     if options.is_empty() {
         return -1;
     }
+
     let opts_str: String = options
         .iter()
         .enumerate()
         .map(|(i, o)| format!("{}. {}\n", i, o.as_str().unwrap_or("")))
         .collect();
 
+    // Python's STRICT GRAMMAR PROMPT — exact match
     let prompt = format!(
         "You are an expert English Grammar and Hindi-to-English Translation Teacher.\n\
-         Select the 100% correct answer option index (0, 1, 2, or 3) for the given quiz.\n\
-         RULES: Reply with ONLY a single digit integer (0-3). No text or explanations.\n\n\
-         Question:\nHindi: {}\nEnglish: {}\n\nOptions:\n{}",
+         Your ONLY job is to select the 100% correct answer for the given language quiz question.\n\n\
+         RULES:\n\
+         1. Focus STRICTLY on formal textbook grammar rules. Avoid colloquial or casual English.\n\
+         2. Choose the option that is grammatically correct and makes logical sense.\n\
+         3. If it is a translation question, choose the most accurate exact translation.\n\
+         4. YOU MUST REPLY WITH ONLY A SINGLE DIGIT (0, 1, 2, or 3).\n\
+         5. DO NOT WRITE ANY EXPLANATIONS, BRACKETS, OR EXTRA WORDS.\n\n\
+         Question:\nHindi Text: {}\nEnglish Text: {}\n\nOptions:\n{}",
         q_hi, q_en, opts_str
     );
 
     for _ in 0..2 {
+        // Try DeepSeek first
         match ask_deepseek(client, &prompt).await {
             Ok(text) => {
                 if let Some(idx) = extract_answer(&text, options.len()) {
                     return idx as i64;
                 }
             }
-            Err(e) => {
-                error!("DeepSeek error: {}", e);
-            }
+            Err(e) => error!("DeepSeek error: {}", e),
         }
-        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        // Try Claude Sonnet fallback (Python: if CRYPTO_AVAILABLE → ask_claude_sonnet)
+        match ask_claude_sonnet(client, &prompt).await {
+            Ok(text) => {
+                if let Some(idx) = extract_answer(&text, options.len()) {
+                    return idx as i64;
+                }
+            }
+            Err(e) => error!("Claude Sonnet error: {}", e),
+        }
+
+        // Python: time.sleep(1.5)
+        tokio::time::sleep(Duration::from_millis(1500)).await;
     }
+
     -1
 }
 
-// ─── Worker Loop ──────────────────────────────────────────────────────────────
+// ─── Worker Loop — Python exact match ────────────────────────────────────────
 
 async fn run_worker(
     state: AppState,
@@ -406,7 +539,7 @@ async fn run_worker(
 
     update!(&mut status, &state, "Session started, entering quiz loop");
 
-    // Main loop
+    // ─── Main Loop ────────────────────────────────────────────────────────────
     loop {
         // Check stop signal
         if let Some(running) = state.active_workers.get(&key) {
@@ -419,35 +552,37 @@ async fn run_worker(
             break;
         }
 
-        // Re-fetch question if needed
+        // Re-fetch question if needed (Python: 900s recovery loop)
         if current_question.is_none() {
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            match client
-                .post("https://api.minipix.co/v4/quiz/session/start")
-                .headers(headers_to_reqwest(&headers))
-                .body("")
-                .send()
-                .await
-            {
-                Ok(r) => {
-                    if let Ok(v) = r.json::<Value>().await {
-                        if v["success"].as_bool().unwrap_or(false) {
-                            quiz_session_id = v["session"]["sessionId"]
-                                .as_str()
-                                .unwrap_or("")
-                                .to_string();
-                            current_question = v.get("question").cloned();
+            loop {
+                update!(
+                    &mut status,
+                    &state,
+                    "⚠️ Daily limit ya server delay. 15 minute (900s) baad retry karunga..."
+                );
+                tokio::time::sleep(Duration::from_secs(900)).await;
+
+                match client
+                    .post("https://api.minipix.co/v4/quiz/session/start")
+                    .headers(headers_to_reqwest(&headers))
+                    .body("")
+                    .send()
+                    .await
+                {
+                    Ok(r) => {
+                        if let Ok(v) = r.json::<Value>().await {
+                            if v["success"].as_bool().unwrap_or(false) && v.get("question").is_some() {
+                                quiz_session_id = v["session"]["sessionId"]
+                                    .as_str()
+                                    .unwrap_or("")
+                                    .to_string();
+                                current_question = v.get("question").cloned();
+                                break;
+                            }
                         }
                     }
+                    Err(_) => {}
                 }
-                Err(_) => {
-                    tokio::time::sleep(Duration::from_secs(30)).await;
-                    continue;
-                }
-            }
-            if current_question.is_none() {
-                tokio::time::sleep(Duration::from_secs(60)).await;
-                continue;
             }
         }
 
@@ -455,25 +590,23 @@ async fn run_worker(
         let q_id = q["questionId"].as_str().unwrap_or("").to_string();
         let q_hi = q["questionHi"].as_str().unwrap_or("").to_string();
         let q_en = q["questionEn"].as_str().unwrap_or("").to_string();
-        let options: Vec<Value> = q["options"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
+        let options: Vec<Value> = q["options"].as_array().cloned().unwrap_or_default();
+        let q_index = q["index"].as_u64().unwrap_or(0) + 1;
+        let q_total = q["total"].as_u64().unwrap_or(0);
         let q_display = if !q_hi.is_empty() { q_hi.clone() } else { q_en.clone() };
 
         status.current_question = Some(q_display[..q_display.len().min(80)].to_string());
         status.status = "analyzing".into();
-        update!(&mut status, &state, "AI analyzing question...");
+        update!(
+            &mut status,
+            &state,
+            format!("Q{}/{} — AI analyzing...", q_index, q_total)
+        );
 
         tokio::time::sleep(Duration::from_millis(400)).await;
 
-        // Check answer DB first
-        let q_key = format!(
-            "{}_{}",
-            q_en.trim(),
-            q_hi.trim()
-        );
-
+        // ─── Brain Memory Check ───────────────────────────────────────────────
+        let q_key = format!("{}_{}", q_en.trim(), q_hi.trim());
         let mut chosen_index: i64 = -1;
 
         if let Some(cached) = state.answers_db.get(&q_key) {
@@ -484,15 +617,28 @@ async fn run_worker(
                     break;
                 }
             }
+            if chosen_index != -1 {
+                update!(
+                    &mut status,
+                    &state,
+                    format!("🧠 Found in Brain Memory! Option {}. Submitting...", chosen_index)
+                );
+            }
         }
 
+        // ─── AI Answer ────────────────────────────────────────────────────────
         if chosen_index == -1 {
             chosen_index = get_ai_answer(client, &q_hi, &q_en, &options).await;
         }
 
+        // Python: if AI fails → sleep 120s, then retry same question
         if chosen_index == -1 {
-            update!(&mut status, &state, "AI failed to determine answer, retrying in 10s");
-            tokio::time::sleep(Duration::from_secs(10)).await;
+            update!(
+                &mut status,
+                &state,
+                "⚠️ AI engines overloaded. 2 minute ka break le raha hu..."
+            );
+            tokio::time::sleep(Duration::from_secs(120)).await;
             current_question = Some(q);
             continue;
         }
@@ -501,99 +647,246 @@ async fn run_worker(
         update!(
             &mut status,
             &state,
-            format!("Submitting option {}...", chosen_index)
+            format!("✅ AI selected Option {}. Submitting...", chosen_index)
         );
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        // Python: random delay 4.0–6.0s before submit
+        let delay_ms = {
+            let mut rng = rand::thread_rng();
+            rng.gen_range(4000..6000)
+        };
+        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
 
-        // Submit answer
+        // ─── Submit Answer — 3 Retries with 6s sleep (Python exact) ─────────
         let ans_payload = json!({
             "sessionId": quiz_session_id,
             "questionId": q_id,
             "chosenIndex": chosen_index
         });
 
-        let ans_res = match client
-            .post("https://api.minipix.co/v4/quiz/session/answer")
-            .headers(headers_to_reqwest(&headers))
-            .json(&ans_payload)
-            .send()
-            .await
-        {
-            Ok(r) => r,
-            Err(_) => {
-                tokio::time::sleep(Duration::from_secs(10)).await;
-                current_question = Some(q);
-                continue;
-            }
-        };
+        let mut submit_success = false;
+        let mut ans_data = Value::Null;
 
-        let ans_data: Value = match ans_res.json().await {
-            Ok(v) => v,
-            Err(_) => {
-                tokio::time::sleep(Duration::from_secs(10)).await;
-                continue;
+        for attempt in 0..3 {
+            match client
+                .post("https://api.minipix.co/v4/quiz/session/answer")
+                .headers(headers_to_reqwest(&headers))
+                .json(&ans_payload)
+                .send()
+                .await
+            {
+                Ok(r) => {
+                    match r.json::<Value>().await {
+                        Ok(v) => {
+                            ans_data = v;
+                            submit_success = true;
+                            break;
+                        }
+                        Err(_) => {
+                            update!(
+                                &mut status,
+                                &state,
+                                format!("⚠️ JSON parse fail (Retry {}/3). Waiting 6s...", attempt + 1)
+                            );
+                            tokio::time::sleep(Duration::from_secs(6)).await;
+                        }
+                    }
+                }
+                Err(_) => {
+                    update!(
+                        &mut status,
+                        &state,
+                        format!("⚠️ Server hang (Retry {}/3). Waiting 6s...", attempt + 1)
+                    );
+                    tokio::time::sleep(Duration::from_secs(6)).await;
+                }
             }
-        };
+        }
 
-        if !ans_data["success"].as_bool().unwrap_or(false) {
-            tokio::time::sleep(Duration::from_secs(10)).await;
+        // Python: if 3 retries all fail → sleep 120s and retry
+        if !submit_success {
+            update!(
+                &mut status,
+                &state,
+                "❌ Server not responding (3 retries failed). 2 minute sleep karke retry karunga..."
+            );
+            tokio::time::sleep(Duration::from_secs(120)).await;
+            current_question = Some(q);
             continue;
         }
 
+        if !ans_data["success"].as_bool().unwrap_or(false) {
+            update!(
+                &mut status,
+                &state,
+                "❌ Submission failed. 2 minute baad retry kar raha hu..."
+            );
+            tokio::time::sleep(Duration::from_secs(120)).await;
+            current_question = Some(q);
+            continue;
+        }
+
+        // ─── Result Handling ──────────────────────────────────────────────────
         let is_correct = ans_data["correct"].as_bool().unwrap_or(false);
+        let coins_so_far = ans_data["coinsSoFar"].as_i64().unwrap_or(0);
 
         if is_correct {
             status.correct += 1;
             status.status = "running".into();
-            update!(&mut status, &state, "✅ Correct! +Coins");
+            update!(
+                &mut status,
+                &state,
+                format!("✅ Sahi Jawab! (Coins: {})", coins_so_far)
+            );
         } else {
             status.wrong += 1;
             status.status = "running".into();
 
-            // Save correct answer to DB
+            // Save correct answer to Brain Memory (Python exact logic)
             if let Some(correct_idx) = ans_data["correctIndex"].as_u64() {
                 if let Some(correct_opt) = options.get(correct_idx as usize) {
                     let correct_text = correct_opt.as_str().unwrap_or("").trim().to_string();
-                    state.answers_db.insert(q_key.clone(), correct_text);
-                    state.save_ans_db();
+                    if !correct_text.is_empty() {
+                        state.answers_db.insert(q_key.clone(), correct_text.clone());
+                        state.save_ans_db();
+                        update!(
+                            &mut status,
+                            &state,
+                            format!(
+                                "❌ Galat Jawab! (Coins: {}) — Sahi Jawab Brain mein save: {}",
+                                coins_so_far, correct_text
+                            )
+                        );
+                    }
                 }
+            } else {
+                update!(
+                    &mut status,
+                    &state,
+                    format!("❌ Galat Jawab! (Coins: {})", coins_so_far)
+                );
             }
-
-            update!(&mut status, &state, "❌ Wrong — correct answer saved to brain");
         }
 
-        tokio::time::sleep(Duration::from_millis(800)).await;
+        tokio::time::sleep(Duration::from_millis(1500)).await;
 
-        // Advance to next question
-        let next = &ans_data["next"];
+        // ─── Advance to Next Question ─────────────────────────────────────────
+        let next = &ans_data["next"].clone();
 
         if next["result"].is_object() {
+            // Python: Level complete → 60s cooldown before next level
             let result = &next["result"];
             let score = result["scorePct"].as_f64().unwrap_or(0.0);
             let coins = result["coins"].as_i64().unwrap_or(0);
+            let level = result["level"].as_i64().unwrap_or(0);
+
             let msg = format!(
-                "🏁 Level done! Score: {:.0}% | Coins: {} | ✅{} ❌{}",
-                score, coins, status.correct, status.wrong
+                "🏁 Level {} done! Score: {:.0}% | Coins: {} | ✅{} ❌{} — 1 minute cooldown...",
+                level, score, coins, status.correct, status.wrong
             );
             update!(&mut status, &state, msg);
-            tokio::time::sleep(Duration::from_secs(10)).await;
-            current_question = None;
-        } else if next["question"].is_object() {
-            current_question = next.get("question").cloned();
-        } else {
-            // Try ad-ack
-            let ad_res = client
-                .post("https://api.minipix.co/v4/quiz/session/ad-ack")
-                .headers(headers_to_reqwest(&headers))
-                .json(&json!({ "sessionId": quiz_session_id }))
-                .send()
-                .await;
 
-            if let Ok(r) = ad_res {
-                if let Ok(ad_data) = r.json::<Value>().await {
-                    if ad_data["success"].as_bool().unwrap_or(false) {
-                        current_question = ad_data.get("question").cloned();
+            // Python: time.sleep(60) — coins update hone ka wait
+            tokio::time::sleep(Duration::from_secs(60)).await;
+
+            update!(&mut status, &state, "🚀 Starting next level automatically...");
+
+            // Python: 900s recovery loop if next level fails
+            loop {
+                match client
+                    .post("https://api.minipix.co/v4/quiz/session/start")
+                    .headers(headers_to_reqwest(&headers))
+                    .body("")
+                    .send()
+                    .await
+                {
+                    Ok(r) => {
+                        if let Ok(v) = r.json::<Value>().await {
+                            if v["success"].as_bool().unwrap_or(false) && v.get("question").is_some() {
+                                quiz_session_id = v["session"]["sessionId"]
+                                    .as_str()
+                                    .unwrap_or("")
+                                    .to_string();
+                                current_question = v.get("question").cloned();
+                                break;
+                            }
+                        }
+                    }
+                    Err(_) => {}
+                }
+                update!(
+                    &mut status,
+                    &state,
+                    "⚠️ Daily limit ya server delay. 15 minute (900s) ki saans le raha hu..."
+                );
+                tokio::time::sleep(Duration::from_secs(900)).await;
+            }
+
+        } else if next["question"].is_object() {
+            // Python: direct next question
+            current_question = next.get("question").cloned();
+            tokio::time::sleep(Duration::from_secs(1)).await;
+
+        } else {
+            // Python: ad-ack bypass, 3 retries
+            update!(&mut status, &state, "🔄 Bypassing ad checkpoint...");
+            let ad_payload = json!({ "sessionId": quiz_session_id });
+            let mut ad_success = false;
+
+            for _ in 0..3 {
+                match client
+                    .post("https://api.minipix.co/v4/quiz/session/ad-ack")
+                    .headers(headers_to_reqwest(&headers))
+                    .json(&ad_payload)
+                    .send()
+                    .await
+                {
+                    Ok(r) => {
+                        if let Ok(ad_data) = r.json::<Value>().await {
+                            if ad_data["success"].as_bool().unwrap_or(false)
+                                && ad_data.get("question").is_some()
+                            {
+                                current_question = ad_data.get("question").cloned();
+                                ad_success = true;
+                                break;
+                            }
+                        }
+                    }
+                    Err(_) => {}
+                }
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+
+            // Python: ad fail → 900s recovery loop
+            if !ad_success {
+                loop {
+                    update!(
+                        &mut status,
+                        &state,
+                        "⚠️ Ad checkpoint failed ya Daily Limit over. 15 minute (900s) ki saans le raha hu..."
+                    );
+                    tokio::time::sleep(Duration::from_secs(900)).await;
+
+                    match client
+                        .post("https://api.minipix.co/v4/quiz/session/start")
+                        .headers(headers_to_reqwest(&headers))
+                        .body("")
+                        .send()
+                        .await
+                    {
+                        Ok(r) => {
+                            if let Ok(v) = r.json::<Value>().await {
+                                if v["success"].as_bool().unwrap_or(false) && v.get("question").is_some() {
+                                    quiz_session_id = v["session"]["sessionId"]
+                                        .as_str()
+                                        .unwrap_or("")
+                                        .to_string();
+                                    current_question = v.get("question").cloned();
+                                    break;
+                                }
+                            }
+                        }
+                        Err(_) => {}
                     }
                 }
             }
@@ -761,7 +1054,7 @@ async fn api_add_account(
     State(state): State<AppState>,
     Json(req): Json<AddTokenReq>,
 ) -> Json<Value> {
-    let session_id = "default".to_string(); // browser generates & sends this
+    let session_id = "default".to_string();
     state
         .user_data
         .entry(session_id.clone())
@@ -836,7 +1129,6 @@ async fn api_launch_all(State(state): State<AppState>) -> Json<Value> {
     let session_id = "default".to_string();
     let worker_count = accounts.len();
 
-    // Init status vector
     let statuses: Vec<WorkerStatus> = accounts
         .iter()
         .enumerate()
@@ -850,11 +1142,8 @@ async fn api_launch_all(State(state): State<AppState>) -> Json<Value> {
             last_event: "Queued".into(),
         })
         .collect();
-    state
-        .worker_statuses
-        .insert(session_id.clone(), statuses);
+    state.worker_statuses.insert(session_id.clone(), statuses);
 
-    // Spawn workers in batches of MAX_WORKERS
     let state_clone = state.clone();
     let sid = session_id.clone();
     tokio::spawn(async move {
@@ -982,17 +1271,13 @@ async fn api_manual_answer(
 
 // ─── WebSocket Handler ────────────────────────────────────────────────────────
 
-async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-) -> Response {
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(|socket| handle_socket(socket, state))
 }
 
 async fn handle_socket(mut socket: WebSocket, state: AppState) {
     let mut rx = state.ws_tx.subscribe();
 
-    // Send current worker statuses on connect
     let statuses = state
         .worker_statuses
         .get("default")
@@ -1042,24 +1327,19 @@ async fn main() {
         .allow_headers(Any);
 
     let app = Router::new()
-        // Static UI
         .route("/", get(serve_index))
         .route("/health", get(health))
-        // WebSocket
         .route("/ws", get(ws_handler))
-        // Account management
         .route("/api/otp/generate", post(api_generate_otp))
         .route("/api/otp/verify", post(api_verify_otp))
         .route("/api/accounts", get(api_get_accounts))
         .route("/api/accounts", post(api_add_account))
         .route("/api/accounts/:idx", axum::routing::delete(api_delete_account))
         .route("/api/accounts/:idx/switch", post(api_switch_account))
-        // Workers
         .route("/api/workers/launch", post(api_launch_all))
         .route("/api/workers/stop", post(api_stop_worker))
         .route("/api/workers/stop-all", post(api_stop_all))
         .route("/api/workers/status", get(api_worker_statuses))
-        // Manual quiz
         .route("/api/manual/start", post(api_manual_start))
         .route("/api/manual/answer", post(api_manual_answer))
         .layer(cors)
