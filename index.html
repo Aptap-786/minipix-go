@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1"/>
+<title>MiniPIX Express</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --lime:#A8E63D;
+  --lime-dark:#6BBF00;
+  --lime-soft:#F0FADC;
+  --purple:#7B2FBE;
+  --purple-dark:#4A1A8E;
+  --gold:#FFD700;
+  --gold-dark:#FFA500;
+  --bg:#F0FADC;
+  --glass:rgba(255,255,255,0.35);
+  --text:#1A1A1A;
+  --muted:#5A6A3A;
+  --success:#4CAF50;
+  --error:#FF5252;
+}
+html,body{height:100%;font-family:'Poppins',sans-serif;background:linear-gradient(160deg,var(--lime-soft),#fff);min-height:100vh;}
+body{padding-bottom:84px;color:var(--text);}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:0;background:transparent;}
+
+/* ── Page enter animation ── */
+@keyframes slideUp{from{transform:translateY(20px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+.item{animation:slideUp 0.3s ease forwards;opacity:0;}
+.item:nth-child(2){animation-delay:.06s;}
+.item:nth-child(3){animation-delay:.12s;}
+.item:nth-child(4){animation-delay:.18s;}
+.item:nth-child(5){animation-delay:.24s;}
+
+/* ── Shimmer ── */
+@keyframes shimmer{0%{background-position:-300px 0}100%{background-position:300px 0}}
+.shimmer{background:linear-gradient(90deg,#e8f8c4 25%,#f0fadc 50%,#e8f8c4 75%);background-size:600px 100%;animation:shimmer 1.2s infinite linear;}
+
+/* ── Max width ── */
+.page-wrap{max-width:420px;margin:0 auto;}
+
+/* ── Header ── */
+.header{
+  background:linear-gradient(180deg,var(--lime),#C8F050);
+  padding:14px 16px 12px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:90;
+}
+.header-logo{display:flex;align-items:center;gap:8px;}
+.header-logo span{font-size:20px;font-weight:900;color:var(--text);letter-spacing:-0.5px;}
+.header-logo .logo-dot{width:8px;height:8px;border-radius:50%;background:var(--purple);}
+.balance-pill{
+  background:#fff;border-radius:20px;padding:6px 14px;
+  box-shadow:0 2px 8px rgba(0,0,0,.12);
+  font-weight:700;color:var(--lime-dark);font-size:14px;
+  display:flex;align-items:center;gap:6px;
+}
+
+/* ── Tabs ── */
+.tabs{
+  display:flex;gap:4px;padding:12px 16px 0;
+  overflow-x:auto;scrollbar-width:none;
+}
+.tab{
+  flex-shrink:0;padding:8px 18px;border-radius:20px;
+  font-size:13px;font-weight:600;cursor:pointer;
+  border:none;background:rgba(107,191,0,0.12);color:var(--muted);
+  transition:all .15s ease;
+}
+.tab.active{background:var(--lime-dark);color:#fff;box-shadow:0 4px 12px rgba(107,191,0,0.35);}
+.tab:active{transform:scale(0.94);}
+
+/* ── Section content ── */
+.section{display:none;padding:0 16px;}
+.section.active{display:block;}
+
+/* ── Section header ── */
+.sec-header{
+  display:flex;align-items:center;gap:12px;
+  border-left:4px solid var(--lime);padding-left:12px;
+  font-size:18px;font-weight:700;color:var(--text);
+  margin:20px 0 12px;
+}
+
+/* ── Stats row ── */
+.stats-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+.stat-card{
+  background:#fff;border-radius:16px;padding:16px;
+  box-shadow:0 2px 12px rgba(168,230,61,0.15);
+}
+.stat-label{font-size:11px;font-weight:600;letter-spacing:0.5px;color:var(--muted);margin-bottom:4px;}
+.stat-value{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;}
+.stat-value.correct{color:var(--success);}
+.stat-value.wrong{color:var(--error);}
+.stat-value.workers{color:var(--lime-dark);}
+.stat-value.coins{color:var(--gold-dark);}
+
+/* ── Glass card ── */
+.glass-card{
+  background:var(--glass);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border:1.5px dashed var(--lime-dark);
+  border-radius:16px;padding:20px;
+  margin-bottom:12px;
+}
+
+/* ── Purple worker card ── */
+.worker-card{
+  background:linear-gradient(135deg,var(--purple),var(--purple-dark));
+  border-radius:18px;padding:16px;
+  margin-bottom:12px;
+  transition:transform .12s ease;
+  position:relative;overflow:hidden;
+}
+.worker-card::before{
+  content:'';position:absolute;top:-40px;right:-40px;
+  width:120px;height:120px;border-radius:50%;
+  background:rgba(255,255,255,0.06);
+}
+.worker-card:active{transform:scale(0.97);}
+.worker-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.worker-info{display:flex;align-items:center;gap:10px;}
+.worker-avatar{
+  width:42px;height:42px;border-radius:12px;
+  background:rgba(255,255,255,0.18);
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:16px;font-weight:700;
+}
+.worker-name{color:#fff;font-size:14px;font-weight:700;}
+.worker-phone{color:rgba(255,255,255,0.7);font-size:12px;font-weight:500;}
+.worker-status-badge{
+  border-radius:20px;padding:4px 12px;
+  font-size:10px;font-weight:700;letter-spacing:0.5px;
+  text-transform:uppercase;
+}
+.badge-running{background:var(--lime);color:#000;}
+.badge-analyzing{background:var(--gold);color:#000;}
+.badge-submitting{background:rgba(255,255,255,0.2);color:#fff;}
+.badge-stopped{background:rgba(255,82,82,0.25);color:#ff8a8a;}
+.badge-idle{background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.6);}
+
+.worker-question{
+  background:rgba(0,0,0,0.2);border-radius:10px;
+  padding:8px 12px;font-size:12px;color:rgba(255,255,255,0.85);
+  margin-bottom:10px;min-height:32px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.worker-stats{display:flex;gap:8px;}
+.earn-block{
+  background:rgba(0,0,0,0.2);border-radius:10px;
+  padding:8px 14px;text-align:center;flex:1;
+}
+.earn-label{font-size:10px;font-weight:600;color:rgba(255,255,255,0.7);letter-spacing:0.5px;}
+.earn-value{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--gold);}
+.earn-value.wrong-val{color:var(--error);}
+.stop-btn{
+  background:rgba(255,82,82,0.2);border:1px solid rgba(255,82,82,0.4);
+  color:#ff8a8a;border-radius:8px;padding:6px 12px;
+  font-size:11px;font-weight:700;cursor:pointer;
+  transition:transform .12s ease;font-family:'Poppins',sans-serif;
+}
+.stop-btn:active{transform:scale(0.92);}
+
+/* ── Event log ── */
+.event-log{
+  background:rgba(0,0,0,0.15);border-radius:8px;
+  padding:6px 10px;font-size:11px;
+  color:rgba(255,255,255,0.65);margin-top:8px;
+}
+
+/* ── Progress bar ── */
+.progress-bar{
+  background:rgba(255,255,255,0.15);border-radius:10px;
+  height:4px;margin-top:8px;overflow:hidden;
+}
+.progress-fill{
+  height:100%;background:var(--lime);border-radius:10px;
+  transition:width .5s ease;
+}
+
+/* ── CTA Button ── */
+.btn-primary{
+  background:var(--lime-dark);color:#fff;border-radius:14px;
+  padding:14px;font-size:16px;font-weight:700;
+  width:100%;border:none;cursor:pointer;
+  transition:transform .12s ease;font-family:'Poppins',sans-serif;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.btn-primary:active{transform:scale(0.96);}
+.btn-primary:disabled{opacity:0.6;cursor:not-allowed;}
+.btn-secondary{
+  background:transparent;border:2px solid var(--lime-dark);
+  color:var(--lime-dark);border-radius:14px;padding:12px;
+  font-size:15px;font-weight:700;width:100%;cursor:pointer;
+  transition:all .12s ease;font-family:'Poppins',sans-serif;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.btn-secondary:active{transform:scale(0.96);}
+.btn-danger{
+  background:rgba(255,82,82,0.1);border:2px solid var(--error);
+  color:var(--error);border-radius:14px;padding:12px;
+  font-size:15px;font-weight:700;width:100%;cursor:pointer;
+  transition:all .12s ease;font-family:'Poppins',sans-serif;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  margin-top:8px;
+}
+.btn-danger:active{transform:scale(0.96);}
+
+.btn-row{display:flex;gap:10px;margin-bottom:16px;}
+.btn-row .btn-primary,.btn-row .btn-secondary{flex:1;}
+
+/* ── Input ── */
+.input-group{margin-bottom:14px;}
+.input-label{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;display:block;letter-spacing:0.3px;}
+.input-wrap{position:relative;}
+.input-prefix{
+  position:absolute;left:12px;top:50%;transform:translateY(-50%);
+  font-size:14px;font-weight:600;color:var(--muted);
+}
+input[type=text],input[type=tel],input[type=number]{
+  border:1.5px dashed var(--lime-dark);border-radius:12px;
+  padding:10px 14px;font-family:'Poppins',sans-serif;font-size:14px;
+  background:rgba(255,255,255,0.7);width:100%;outline:none;
+  transition:border-color .15s ease,box-shadow .15s ease;
+}
+input[type=text]:focus,input[type=tel]:focus,input[type=number]:focus{
+  border-color:var(--lime);box-shadow:0 0 0 3px rgba(168,230,61,0.2);
+  border-style:solid;
+}
+.input-has-prefix input{padding-left:38px;}
+
+/* ── Account card ── */
+.account-card{
+  background:#fff;border-radius:16px;padding:14px 16px;
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:8px;box-shadow:0 2px 10px rgba(168,230,61,0.12);
+  transition:transform .12s ease;
+}
+.account-card:active{transform:scale(0.98);}
+.account-info{display:flex;align-items:center;gap:12px;}
+.account-avatar{
+  width:40px;height:40px;border-radius:50%;
+  background:linear-gradient(135deg,var(--lime),var(--lime-dark));
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-weight:700;font-size:16px;flex-shrink:0;
+}
+.account-phone{font-size:14px;font-weight:600;color:var(--text);}
+.account-sub{font-size:11px;color:var(--muted);font-weight:500;}
+.account-actions{display:flex;align-items:center;gap:8px;}
+.icon-btn{
+  width:32px;height:32px;border-radius:8px;border:none;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:transform .12s ease;
+}
+.icon-btn:active{transform:scale(0.9);}
+.icon-btn-del{background:rgba(255,82,82,0.1);color:var(--error);}
+.icon-btn-switch{background:rgba(107,191,0,0.12);color:var(--lime-dark);}
+.active-dot{
+  width:8px;height:8px;border-radius:50%;background:var(--success);
+  box-shadow:0 0 0 2px rgba(76,175,80,0.25);
+}
+
+/* ── Toast ── */
+.toast{
+  position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--text);color:#fff;border-radius:12px;
+  padding:10px 20px;font-size:13px;font-weight:600;
+  z-index:999;opacity:0;transition:all .25s ease;pointer-events:none;
+  white-space:nowrap;max-width:90vw;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.success{background:var(--success);}
+.toast.error{background:var(--error);}
+
+/* ── Modal ── */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.5);
+  z-index:200;display:none;align-items:flex-end;justify-content:center;
+  backdrop-filter:blur(4px);
+}
+.modal-overlay.show{display:flex;}
+.modal{
+  background:#fff;border-radius:24px 24px 0 0;
+  padding:24px 20px 32px;width:100%;max-width:420px;
+  animation:slideUp .25s ease;
+}
+.modal-handle{
+  width:40px;height:4px;background:#e0e0e0;border-radius:4px;
+  margin:0 auto 20px;
+}
+.modal-title{font-size:18px;font-weight:800;color:var(--text);margin-bottom:20px;}
+
+/* ── Manual quiz ── */
+.quiz-option{
+  background:#fff;border:2px solid transparent;border-radius:14px;
+  padding:14px 16px;margin-bottom:8px;cursor:pointer;
+  font-size:14px;font-weight:600;color:var(--text);
+  transition:all .12s ease;display:flex;align-items:center;gap:10px;
+}
+.quiz-option:active{transform:scale(0.98);}
+.quiz-option:hover{border-color:var(--lime-dark);background:var(--lime-soft);}
+.quiz-option.correct-ans{border-color:var(--success);background:rgba(76,175,80,0.1);color:var(--success);}
+.quiz-option.wrong-ans{border-color:var(--error);background:rgba(255,82,82,0.1);color:var(--error);}
+.option-idx{
+  width:26px;height:26px;border-radius:8px;
+  background:rgba(107,191,0,0.12);color:var(--lime-dark);
+  font-size:12px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+
+/* ── Empty state ── */
+.empty-state{
+  text-align:center;padding:40px 20px;
+}
+.empty-icon{
+  width:72px;height:72px;border-radius:20px;
+  background:rgba(107,191,0,0.1);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 16px;color:var(--lime-dark);
+}
+.empty-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px;}
+.empty-sub{font-size:13px;color:var(--muted);line-height:1.6;}
+
+/* ── Bottom Nav ── */
+.bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;
+  background:#fff;border-radius:28px 28px 0 0;
+  padding:10px 24px 16px;
+  display:flex;justify-content:space-around;
+  box-shadow:0 -4px 20px rgba(0,0,0,.08);
+  z-index:100;
+}
+.nav-item{
+  display:flex;flex-direction:column;align-items:center;
+  gap:4px;font-size:11px;font-weight:600;
+  cursor:pointer;color:#9E9E9E;
+  transition:all .15s ease;padding:4px 12px;border-radius:12px;
+  border:none;background:none;font-family:'Poppins',sans-serif;
+}
+.nav-item.active{
+  color:var(--lime-dark);font-weight:700;
+  filter:drop-shadow(0 0 4px rgba(107,191,0,0.4));
+}
+.nav-item:active{transform:scale(0.92);}
+
+/* ── WS indicator ── */
+.ws-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--error);display:inline-block;
+  margin-right:6px;transition:background .3s;
+}
+.ws-dot.connected{background:var(--success);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.5;}}
+
+/* ── Divider ── */
+.divider{height:1px;background:rgba(0,0,0,0.06);margin:16px 0;}
+
+/* ── Responsive ── */
+@media(min-width:421px){
+  .page-wrap{margin:0 auto;}
+  .bottom-nav{max-width:420px;left:50%;transform:translateX(-50%);}
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="page-wrap">
+<div class="header">
+  <div class="header-logo">
+    <div class="logo-dot"></div>
+    <span>MiniPIX</span>
+    <span style="font-size:11px;font-weight:600;background:rgba(0,0,0,0.12);padding:2px 8px;border-radius:20px;color:#1A1A1A;">EXPRESS</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div class="ws-dot" id="ws-dot"></div>
+    <div class="balance-pill">
+      <i data-lucide="trophy" style="width:14px;height:14px;"></i>
+      <span id="total-correct">0</span> correct
+    </div>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('workers')">⚡ Workers</button>
+  <button class="tab" onclick="switchTab('accounts')">👤 Accounts</button>
+  <button class="tab" onclick="switchTab('manual')">🕹️ Manual</button>
+  <button class="tab" onclick="switchTab('login')">🔐 Login</button>
+</div>
+
+<!-- ─── WORKERS TAB ─── -->
+<div class="section active" id="tab-workers">
+  <div class="sec-header item">
+    <i data-lucide="zap" style="width:20px;height:20px;color:var(--lime-dark);"></i>
+    Express Auto-Play
+  </div>
+
+  <div class="stats-row item">
+    <div class="stat-card">
+      <div class="stat-label">ACTIVE WORKERS</div>
+      <div class="stat-value workers" id="stat-active">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">TOTAL CORRECT</div>
+      <div class="stat-value correct" id="stat-correct">0</div>
+    </div>
+  </div>
+
+  <div class="btn-row item">
+    <button class="btn-primary" id="launch-btn" onclick="launchAllWorkers()">
+      <i data-lucide="rocket" style="width:18px;height:18px;"></i>
+      Launch All Workers
+    </button>
+    <button class="btn-secondary" onclick="stopAllWorkers()">
+      <i data-lucide="square" style="width:16px;height:16px;"></i>
+      Stop All
+    </button>
+  </div>
+
+  <div id="workers-container">
+    <div class="empty-state item">
+      <div class="empty-icon"><i data-lucide="cpu" style="width:32px;height:32px;"></i></div>
+      <div class="empty-title">No workers running</div>
+      <div class="empty-sub">Add accounts then tap Launch All Workers to start the auto-play engine.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── ACCOUNTS TAB ─── -->
+<div class="section" id="tab-accounts">
+  <div class="sec-header item">
+    <i data-lucide="users" style="width:20px;height:20px;color:var(--lime-dark);"></i>
+    Saved Accounts
+  </div>
+
+  <div id="accounts-list">
+    <div class="empty-state item">
+      <div class="empty-icon"><i data-lucide="user-plus" style="width:32px;height:32px;"></i></div>
+      <div class="empty-title">No accounts yet</div>
+      <div class="empty-sub">Go to Login tab to add your first MiniPIX account.</div>
+    </div>
+  </div>
+
+  <button class="btn-secondary item" style="margin-top:8px;" onclick="switchTab('login')">
+    <i data-lucide="plus-circle" style="width:16px;height:16px;"></i>
+    Add Account
+  </button>
+</div>
+
+<!-- ─── MANUAL TAB ─── -->
+<div class="section" id="tab-manual">
+  <div class="sec-header item">
+    <i data-lucide="gamepad-2" style="width:20px;height:20px;color:var(--lime-dark);"></i>
+    Manual Play
+  </div>
+
+  <div class="glass-card item" id="manual-account-select">
+    <div class="input-group" style="margin-bottom:12px;">
+      <label class="input-label">SELECT ACCOUNT</label>
+      <select id="manual-acc-select" style="width:100%;padding:10px 14px;border:1.5px dashed var(--lime-dark);border-radius:12px;font-family:'Poppins',sans-serif;font-size:14px;background:rgba(255,255,255,0.7);outline:none;color:var(--text);">
+        <option value="">-- Select Account --</option>
+      </select>
+    </div>
+    <button class="btn-primary" onclick="startManualQuiz()">
+      <i data-lucide="play" style="width:16px;height:16px;"></i>
+      Start Quiz
+    </button>
+  </div>
+
+  <div id="manual-quiz-container" style="display:none;">
+    <div class="glass-card item">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px;letter-spacing:0.5px;">QUESTION <span id="manual-q-idx">—</span></div>
+      <div id="manual-q-text" style="font-size:15px;font-weight:600;color:var(--text);line-height:1.5;margin-bottom:16px;">—</div>
+      <div id="manual-options"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── LOGIN TAB ─── -->
+<div class="section" id="tab-login">
+  <div class="sec-header item">
+    <i data-lucide="log-in" style="width:20px;height:20px;color:var(--lime-dark);"></i>
+    Add Account
+  </div>
+
+  <!-- OTP Flow -->
+  <div class="glass-card item" id="otp-flow">
+    <div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:16px;">LOGIN VIA OTP</div>
+    <div class="input-group">
+      <label class="input-label">MOBILE NUMBER</label>
+      <div class="input-wrap input-has-prefix">
+        <span class="input-prefix">+91</span>
+        <input type="tel" id="phone-input" placeholder="10-digit number" maxlength="10"/>
+      </div>
+    </div>
+    <button class="btn-primary" id="otp-btn" onclick="requestOtp()">
+      <i data-lucide="send" style="width:16px;height:16px;"></i>
+      Send OTP
+    </button>
+  </div>
+
+  <!-- OTP verify (hidden until OTP sent) -->
+  <div class="glass-card item" id="verify-flow" style="display:none;">
+    <div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:16px;">VERIFY OTP</div>
+    <div class="input-group">
+      <label class="input-label">OTP CODE</label>
+      <input type="number" id="otp-input" placeholder="Enter OTP"/>
+    </div>
+    <button class="btn-primary" id="verify-btn" onclick="verifyOtp()">
+      <i data-lucide="check-circle" style="width:16px;height:16px;"></i>
+      Verify & Save
+    </button>
+  </div>
+
+  <div class="divider item"></div>
+
+  <!-- Direct token -->
+  <div class="glass-card item">
+    <div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:16px;">OR ADD VIA ACCESS TOKEN</div>
+    <div class="input-group">
+      <label class="input-label">PHONE NUMBER</label>
+      <div class="input-wrap input-has-prefix">
+        <span class="input-prefix">+91</span>
+        <input type="tel" id="token-phone" placeholder="10-digit number" maxlength="10"/>
+      </div>
+    </div>
+    <div class="input-group">
+      <label class="input-label">ACCESS TOKEN (eyJ...)</label>
+      <input type="text" id="token-input" placeholder="Paste token here"/>
+    </div>
+    <button class="btn-primary" onclick="addViaToken()">
+      <i data-lucide="key" style="width:16px;height:16px;"></i>
+      Save Token
+    </button>
+  </div>
+</div>
+
+</div><!-- end page-wrap -->
+
+<!-- Bottom Nav -->
+<nav class="bottom-nav">
+  <button class="nav-item active" id="nav-workers" onclick="switchTab('workers')">
+    <i data-lucide="zap" style="width:22px;height:22px;"></i>
+    Workers
+  </button>
+  <button class="nav-item" id="nav-accounts" onclick="switchTab('accounts')">
+    <i data-lucide="users" style="width:22px;height:22px;"></i>
+    Accounts
+  </button>
+  <button class="nav-item" id="nav-manual" onclick="switchTab('manual')">
+    <i data-lucide="gamepad-2" style="width:22px;height:22px;"></i>
+    Manual
+  </button>
+  <button class="nav-item" id="nav-login" onclick="switchTab('login')">
+    <i data-lucide="log-in" style="width:22px;height:22px;"></i>
+    Login
+  </button>
+</nav>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Modal (OTP device limit) -->
+<div class="modal-overlay" id="device-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Device Limit Reached</div>
+    <p style="font-size:14px;color:var(--muted);margin-bottom:20px;line-height:1.6;">
+      This account has too many devices. Enter your access token directly instead.
+    </p>
+    <div class="input-group">
+      <label class="input-label">ACCESS TOKEN (eyJ...)</label>
+      <input type="text" id="modal-token-input" placeholder="Paste token here"/>
+    </div>
+    <button class="btn-primary" onclick="saveModalToken()">
+      <i data-lucide="save" style="width:16px;height:16px;"></i>
+      Save Account
+    </button>
+    <button class="btn-secondary" style="margin-top:10px;" onclick="closeModal()">Cancel</button>
+  </div>
+</div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+let ws = null;
+let wsReconnectTimer = null;
+let accounts = [];
+let workerStatuses = [];
+let tempOtpData = null; // { phone, session_token, device_id }
+let manualSession = null; // { quiz_session_id, account_index }
+
+// ─── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => {
+    if (t.textContent.toLowerCase().includes(name)) t.classList.add('active');
+  });
+  const navEl = document.getElementById('nav-' + name);
+  if (navEl) navEl.classList.add('active');
+
+  if (name === 'accounts') loadAccounts();
+  if (name === 'manual') populateManualSelect();
+  if (name === 'workers') loadWorkerStatuses();
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+function showToast(msg, type = 'default', duration = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type !== 'default' ? ' ' + type : '');
+  setTimeout(() => { t.className = 'toast'; }, duration);
+}
+
+// ─── WebSocket ────────────────────────────────────────────────────────────────
+function connectWs() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+  ws.onopen = () => {
+    document.getElementById('ws-dot').classList.add('connected');
+    clearTimeout(wsReconnectTimer);
+  };
+
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'init' || msg.type === 'workers_update') {
+        workerStatuses = msg.workers || [];
+        renderWorkers();
+      } else if (msg.type === 'worker_update') {
+        const w = msg.worker;
+        const idx = w.worker_id - 1;
+        workerStatuses[idx] = w;
+        renderWorkers();
+      }
+    } catch (_) {}
+  };
+
+  ws.onclose = () => {
+    document.getElementById('ws-dot').classList.remove('connected');
+    wsReconnectTimer = setTimeout(connectWs, 3000);
+  };
+
+  ws.onerror = () => ws.close();
+}
+
+connectWs();
+
+// ─── API helpers ──────────────────────────────────────────────────────────────
+async function api(path, method = 'GET', body = null) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  return r.json();
+}
+
+// ─── Accounts ─────────────────────────────────────────────────────────────────
+async function loadAccounts() {
+  const data = await api('/api/accounts');
+  accounts = data.accounts || [];
+  const active = data.active_index || 0;
+  const list = document.getElementById('accounts-list');
+
+  if (accounts.length === 0) {
+    list.innerHTML = `
+      <div class="empty-state item">
+        <div class="empty-icon"><i data-lucide="user-plus" style="width:32px;height:32px;"></i></div>
+        <div class="empty-title">No accounts yet</div>
+        <div class="empty-sub">Go to Login tab to add your first MiniPIX account.</div>
+      </div>`;
+    lucide.createIcons();
+    return;
+  }
+
+  list.innerHTML = accounts.map((a, i) => `
+    <div class="account-card item" id="acc-card-${i}">
+      <div class="account-info">
+        <div class="account-avatar">${i + 1}</div>
+        <div>
+          <div class="account-phone">+91 ${a.phone_number}</div>
+          <div class="account-sub">Device: ${a.device_id.slice(0, 8)}...</div>
+        </div>
+      </div>
+      <div class="account-actions">
+        ${i === active ? '<div class="active-dot"></div>' : ''}
+        <button class="icon-btn icon-btn-switch" onclick="switchAccount(${i})" title="Set Active">
+          <i data-lucide="check-circle" style="width:16px;height:16px;"></i>
+        </button>
+        <button class="icon-btn icon-btn-del" onclick="deleteAccount(${i})" title="Delete">
+          <i data-lucide="trash-2" style="width:16px;height:16px;"></i>
+        </button>
+      </div>
+    </div>
+  `).join('');
+  lucide.createIcons();
+}
+
+async function deleteAccount(idx) {
+  if (!confirm(`Delete account #${idx + 1}?`)) return;
+  await api(`/api/accounts/${idx}`, 'DELETE');
+  showToast('Account removed', 'success');
+  loadAccounts();
+}
+
+async function switchAccount(idx) {
+  await api(`/api/accounts/${idx}/switch`, 'POST');
+  showToast(`Account #${idx + 1} set as active`, 'success');
+  loadAccounts();
+}
+
+// ─── Login: OTP ───────────────────────────────────────────────────────────────
+async function requestOtp() {
+  const phone = document.getElementById('phone-input').value.trim();
+  if (phone.length !== 10) { showToast('Enter valid 10-digit number', 'error'); return; }
+
+  const btn = document.getElementById('otp-btn');
+  btn.disabled = true; btn.innerHTML = '<i data-lucide="loader" style="width:16px;height:16px;"></i> Sending...';
+  lucide.createIcons();
+
+  const data = await api('/api/otp/generate', 'POST', { phone_number: phone });
+
+  if (data.success) {
+    tempOtpData = { phone, session_token: data.session_token, device_id: data.device_id };
+    document.getElementById('verify-flow').style.display = 'block';
+    showToast('OTP sent! Check SMS.', 'success');
+  } else {
+    showToast('OTP failed: ' + (data.error || 'Unknown error'), 'error');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i data-lucide="send" style="width:16px;height:16px;"></i> Send OTP';
+  lucide.createIcons();
+}
+
+async function verifyOtp() {
+  if (!tempOtpData) { showToast('Request OTP first', 'error'); return; }
+  const otp = document.getElementById('otp-input').value.trim();
+  if (!otp) { showToast('Enter OTP', 'error'); return; }
+
+  const btn = document.getElementById('verify-btn');
+  btn.disabled = true; btn.innerHTML = '<i data-lucide="loader" style="width:16px;height:16px;"></i> Verifying...';
+  lucide.createIcons();
+
+  const data = await api('/api/otp/verify', 'POST', {
+    phone_number: tempOtpData.phone,
+    otp,
+    session_token: tempOtpData.session_token,
+    device_id: tempOtpData.device_id
+  });
+
+  if (data.device_limit) {
+    document.getElementById('device-modal').classList.add('show');
+    showToast('Device limit — enter token manually', 'error');
+  } else if (data.success) {
+    await api('/api/accounts', 'POST', {
+      phone_number: tempOtpData.phone,
+      access_token: data.access_token,
+      device_id: tempOtpData.device_id
+    });
+    showToast('Account saved!', 'success');
+    document.getElementById('verify-flow').style.display = 'none';
+    document.getElementById('phone-input').value = '';
+    document.getElementById('otp-input').value = '';
+    tempOtpData = null;
+    switchTab('accounts');
+  } else {
+    showToast('Verification failed', 'error');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i data-lucide="check-circle" style="width:16px;height:16px;"></i> Verify & Save';
+  lucide.createIcons();
+}
+
+async function addViaToken() {
+  const phone = document.getElementById('token-phone').value.trim();
+  const token = document.getElementById('token-input').value.trim();
+  if (phone.length !== 10) { showToast('Enter valid phone', 'error'); return; }
+  if (!token.startsWith('eyJ')) { showToast('Enter valid token', 'error'); return; }
+
+  await api('/api/accounts', 'POST', {
+    phone_number: phone,
+    access_token: token,
+    device_id: Array.from({length: 16}, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random()*36)]).join('')
+  });
+  showToast('Account saved!', 'success');
+  document.getElementById('token-phone').value = '';
+  document.getElementById('token-input').value = '';
+  switchTab('accounts');
+}
+
+async function saveModalToken() {
+  const token = document.getElementById('modal-token-input').value.trim();
+  if (!token.startsWith('eyJ') || !tempOtpData) { showToast('Invalid token', 'error'); return; }
+
+  await api('/api/accounts', 'POST', {
+    phone_number: tempOtpData.phone,
+    access_token: token,
+    device_id: tempOtpData.device_id
+  });
+  showToast('Account saved!', 'success');
+  closeModal();
+  switchTab('accounts');
+}
+
+function closeModal() {
+  document.getElementById('device-modal').classList.remove('show');
+  document.getElementById('modal-token-input').value = '';
+}
+
+// ─── Workers ──────────────────────────────────────────────────────────────────
+async function launchAllWorkers() {
+  const btn = document.getElementById('launch-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i data-lucide="loader" style="width:16px;height:16px;"></i> Launching...';
+  lucide.createIcons();
+
+  const data = await api('/api/workers/launch', 'POST');
+  if (data.success) {
+    showToast(`${data.workers} workers launched!`, 'success');
+  } else {
+    showToast(data.error || 'Launch failed — add accounts first', 'error');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i data-lucide="rocket" style="width:16px;height:16px;"></i> Launch All Workers';
+  lucide.createIcons();
+}
+
+async function stopAllWorkers() {
+  await api('/api/workers/stop-all', 'POST');
+  showToast('Stop signal sent to all workers', 'default');
+}
+
+async function stopWorker(idx) {
+  await api('/api/workers/stop', 'POST', { session_id: 'default', worker_index: idx });
+  showToast(`Stop signal sent to Worker #${idx + 1}`, 'default');
+}
+
+async function loadWorkerStatuses() {
+  const data = await api('/api/workers/status');
+  workerStatuses = data.workers || [];
+  renderWorkers();
+}
+
+function renderWorkers() {
+  const container = document.getElementById('workers-container');
+  const totalCorrect = workerStatuses.reduce((s, w) => s + (w.correct || 0), 0);
+  const active = workerStatuses.filter(w => w.status === 'running' || w.status === 'analyzing' || w.status === 'submitting').length;
+
+  document.getElementById('stat-active').textContent = active;
+  document.getElementById('stat-correct').textContent = totalCorrect;
+  document.getElementById('total-correct').textContent = totalCorrect;
+
+  if (workerStatuses.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state item">
+        <div class="empty-icon"><i data-lucide="cpu" style="width:32px;height:32px;"></i></div>
+        <div class="empty-title">No workers running</div>
+        <div class="empty-sub">Add accounts then tap Launch All Workers.</div>
+      </div>`;
+    lucide.createIcons();
+    return;
+  }
+
+  container.innerHTML = workerStatuses.map((w, i) => {
+    const badgeClass = {
+      running: 'badge-running',
+      analyzing: 'badge-analyzing',
+      submitting: 'badge-submitting',
+      stopped: 'badge-stopped',
+      idle: 'badge-idle',
+    }[w.status] || 'badge-idle';
+
+    const badgeLabel = {
+      running: '● RUNNING',
+      analyzing: '◐ AI',
+      submitting: '↑ SUBMIT',
+      stopped: '■ STOPPED',
+      idle: '○ IDLE',
+    }[w.status] || w.status.toUpperCase();
+
+    const total = (w.correct || 0) + (w.wrong || 0);
+    const pct = total > 0 ? Math.round((w.correct / total) * 100) : 0;
+
+    return `
+    <div class="worker-card item">
+      <div class="worker-top">
+        <div class="worker-info">
+          <div class="worker-avatar">${w.worker_id}</div>
+          <div>
+            <div class="worker-name">Worker #${w.worker_id}</div>
+            <div class="worker-phone">+91 ${w.phone}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="worker-status-badge ${badgeClass}">${badgeLabel}</span>
+          ${w.status !== 'stopped' && w.status !== 'idle' ?
+            `<button class="stop-btn" onclick="stopWorker(${i})">■ Stop</button>` : ''}
+        </div>
+      </div>
+      <div class="worker-question">${w.current_question || '—'}</div>
+      <div class="worker-stats">
+        <div class="earn-block">
+          <div class="earn-label">CORRECT</div>
+          <div class="earn-value">${w.correct || 0}</div>
+        </div>
+        <div class="earn-block">
+          <div class="earn-label">WRONG</div>
+          <div class="earn-value wrong-val">${w.wrong || 0}</div>
+        </div>
+        <div class="earn-block">
+          <div class="earn-label">ACCURACY</div>
+          <div class="earn-value">${pct}%</div>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width:${pct}%;"></div>
+      </div>
+      <div class="event-log">${w.last_event || '—'}</div>
+    </div>`;
+  }).join('');
+
+  lucide.createIcons();
+}
+
+// ─── Manual quiz ──────────────────────────────────────────────────────────────
+async function populateManualSelect() {
+  const data = await api('/api/accounts');
+  accounts = data.accounts || [];
+  const sel = document.getElementById('manual-acc-select');
+  sel.innerHTML = '<option value="">-- Select Account --</option>' +
+    accounts.map((a, i) => `<option value="${i}">+91 ${a.phone_number}</option>`).join('');
+}
+
+async function startManualQuiz() {
+  const idx = parseInt(document.getElementById('manual-acc-select').value);
+  if (isNaN(idx)) { showToast('Select an account', 'error'); return; }
+
+  const data = await api('/api/manual/start', 'POST', { session_id: 'default', account_index: idx });
+  if (!data.success) { showToast(data.error || 'Failed to start quiz', 'error'); return; }
+
+  manualSession = { quiz_session_id: data.quiz_session_id, account_index: idx };
+  document.getElementById('manual-quiz-container').style.display = 'block';
+  renderManualQuestion(data.question);
+}
+
+function renderManualQuestion(q) {
+  if (!q) { showToast('No question available', 'error'); return; }
+  const idx = (q.index || 0) + 1;
+  const total = q.total || '?';
+  document.getElementById('manual-q-idx').textContent = `${idx} / ${total}`;
+  document.getElementById('manual-q-text').textContent = q.questionHi || q.questionEn || '—';
+
+  const opts = q.options || [];
+  document.getElementById('manual-options').innerHTML = opts.map((o, i) =>
+    `<div class="quiz-option" id="opt-${i}" onclick="submitManualAnswer('${q.questionId}', ${i})">
+      <div class="option-idx">${String.fromCharCode(65 + i)}</div>
+      ${o}
+    </div>`
+  ).join('');
+}
+
+async function submitManualAnswer(qId, chosenIdx) {
+  if (!manualSession) return;
+
+  // Disable all options
+  document.querySelectorAll('.quiz-option').forEach(o => o.onclick = null);
+
+  const data = await api('/api/manual/answer', 'POST', {
+    session_id: 'default',
+    account_index: manualSession.account_index,
+    question_id: qId,
+    quiz_session_id: manualSession.quiz_session_id,
+    chosen_index: chosenIdx
+  });
+
+  // Highlight result
+  if (data.correct) {
+    document.getElementById('opt-' + chosenIdx).classList.add('correct-ans');
+    showToast('✅ Correct! +Coins', 'success');
+  } else {
+    document.getElementById('opt-' + chosenIdx).classList.add('wrong-ans');
+    if (data.correctIndex !== undefined) {
+      const cel = document.getElementById('opt-' + data.correctIndex);
+      if (cel) cel.classList.add('correct-ans');
+    }
+    showToast('❌ Wrong!', 'error');
+  }
+
+  // Next question after delay
+  setTimeout(() => {
+    if (data.next && data.next.question) {
+      renderManualQuestion(data.next.question);
+    } else if (data.next && data.next.result) {
+      const r = data.next.result;
+      showToast(`Level done! ${r.scorePct}% | Coins: ${r.coins}`, 'success', 4000);
+      document.getElementById('manual-quiz-container').style.display = 'none';
+    }
+  }, 1200);
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+lucide.createIcons();
+loadWorkerStatuses();
+
+// Poll worker status every 5s as fallback
+setInterval(loadWorkerStatuses, 5000);
+
+// Close modal on overlay click
+document.getElementById('device-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+</script>
+</body>
+</html>
