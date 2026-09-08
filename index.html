@@ -1,39 +1,51 @@
+<!-- File Name: index.html -->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniPIX Pro Web Automation Dashboard</title>
+    <title>MiniPIX Pro Advanced Web Dashboard</title>
     <style>
         :root {
-            --bg-color: #0b0f19;
-            --card-bg: #131b2e;
-            --border-color: #1e293b;
+            --bg-color: #090d16;
+            --card-bg: #111827;
+            --border-color: #1f2937;
             --accent: #38bdf8;
             --success: #22c55e;
             --danger: #ef4444;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
+            --warning: #f59e0b;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Inter', system-ui, sans-serif; background-color: var(--bg-color); color: var(--text-main); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
-        .dashboard { width: 100%; max-width: 650px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; padding: 25px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7); }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; }
-        .header h1 { font-size: 18px; font-weight: 600; color: var(--accent); }
-        .badge { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 5px 10px; border-radius: 20px; background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+        .dashboard { width: 100%; max-width: 700px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; padding: 30px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; }
+        .header h1 { font-size: 20px; font-weight: 600; color: var(--accent); }
+        .badge { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 6px 12px; border-radius: 20px; background: rgba(239, 68, 68, 0.1); color: var(--danger); }
         .badge.active { background: rgba(34, 197, 94, 0.1); color: var(--success); }
         .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: pulse 2s infinite; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
-        
-        .grid-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-        .btn { padding: 12px; border: none; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; color: white; text-align: center; }
-        .btn-start { background: var(--success); }
-        .btn-stop { background: var(--danger); }
-        .btn-login { grid-column: span 2; background: #0284c7; }
-        .btn:hover { opacity: 0.9; }
+
+        .menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+        .btn { padding: 14px; border: none; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; color: white; text-align: center; background: #1e293b; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn:hover { background: #334155; transform: translateY(-1px); }
+        .btn-start { background: var(--success); border: none; }
+        .btn-stop { background: var(--danger); border: none; }
+        .btn-login { background: #0284c7; border: none; }
+        .btn-full { grid-column: span 2; background: #7c3aed; border: none; }
+
+        .accounts-box { background: #030712; border: 1px solid var(--border-color); border-radius: 10px; padding: 15px; margin-bottom: 20px; max-height: 150px; overflow-y: auto; }
+        .account-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #111827; border: 1px solid var(--border-color); border-radius: 6px; margin-bottom: 8px; font-size: 13px; }
+        .account-item.active { border-color: var(--success); background: rgba(34, 197, 94, 0.05); }
+        .acc-actions { display: flex; gap: 6px; }
+        .acc-btn { padding: 4px 8px; font-size: 11px; border-radius: 4px; border: none; cursor: pointer; font-weight: 600; }
+        .btn-switch { background: var(--success); color: white; }
+        .btn-del { background: var(--danger); color: white; }
 
         .section-title { font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
-        .terminal { background: #04060c; border: 1px solid var(--border-color); border-radius: 10px; padding: 12px; height: 240px; overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 12px; color: #38bdf8; display: flex; flex-direction: column; gap: 6px; }
+        .terminal { background: #030712; border: 1px solid var(--border-color); border-radius: 10px; padding: 15px; height: 220px; overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 12px; color: #38bdf8; display: flex; flex-direction: column; gap: 6px; }
         .footer { margin-top: 15px; text-align: center; font-size: 11px; color: var(--text-muted); }
     </style>
 </head>
@@ -46,21 +58,27 @@
             </div>
         </div>
 
-        <div class="grid-controls">
-            <button class="btn btn-start" onclick="sendAction('start')">🚀 Start Auto-Play</button>
+        <div class="menu-grid">
+            <button class="btn btn-login" onclick="startLoginProcess()">🟢 Login / Add Account</button>
+            <button class="btn btn-full" onclick="fetchAccounts()">✅ Switch / Manage Accounts</button>
+            <button class="btn btn-start" onclick="sendAction('start')">🚀 Launch Auto-Play</button>
             <button class="btn btn-stop" onclick="sendAction('stop')">🛑 Stop Engine</button>
-            <button class="btn btn-login" onclick="startLoginProcess()">📱 Login / Add Account via Phone</button>
+        </div>
+
+        <div class="section-title">Saved Accounts Management</div>
+        <div id="accounts-container" class="accounts-box">
+            <div style="color: var(--text-muted); font-size: 12px; text-align: center;">Click "Switch / Manage Accounts" to load saved accounts.</div>
         </div>
 
         <div>
             <div class="section-title">Live Execution & Worker Activity Logs</div>
             <div id="terminal-logs" class="terminal">
-                <div>[System] Dashboard initialized successfully. Connecting...</div>
+                <div>[System] Web dashboard initialized successfully.</div>
             </div>
         </div>
 
         <div class="footer">
-            Pure Web Automation Panel & Go Backend
+            Advanced Rust Backend & High-Performance UI Control Panel
         </div>
     </div>
 
@@ -71,11 +89,13 @@
         const statusBadge = document.getElementById('status-badge');
         const statusText = document.getElementById('status-text');
         const terminal = document.getElementById('terminal-logs');
+        const accountsContainer = document.getElementById('accounts-container');
 
         ws.onopen = () => {
             statusBadge.className = 'badge active';
             statusText.textContent = 'Live & Connected';
-            appendLog('System', 'Connected to Render backend stream.');
+            appendLog('System', 'Connected to Rust backend WebSocket stream.');
+            fetchAccounts();
         };
 
         ws.onclose = () => {
@@ -92,6 +112,62 @@
                 appendLog('Data', event.data);
             }
         };
+
+        async function fetchAccounts() {
+            try {
+                const res = await fetch('/api/state');
+                const data = await res.json();
+                if (data.success) {
+                    renderAccounts(data.accounts, data.active_index);
+                }
+            } catch (e) {
+                appendLog('Error', 'Failed to fetch accounts list.');
+            }
+        }
+
+        function renderAccounts(accounts, activeIndex) {
+            if (!accounts || accounts.length === 0) {
+                accountsContainer.innerHTML = `<div style="color: var(--text-muted); font-size: 12px; text-align: center;">No accounts saved yet. Please add an account.</div>`;
+                return;
+            }
+
+            accountsContainer.innerHTML = '';
+            accounts.forEach((acc, idx) => {
+                const isActive = idx === activeIndex;
+                const item = document.createElement('div');
+                item.className = `account-item ${isActive ? 'active' : ''}`;
+                item.innerHTML = `
+                    <span>${isActive ? '✅' : '⚪'} Acc #${idx + 1}: +91${acc.phone_number}</span>
+                    <div class="acc-actions">
+                        ${!isActive ? `<button class="acc-btn btn-switch" onclick="switchAccount(${idx})">Switch</button>` : ''}
+                        <button class="acc-btn btn-del" onclick="deleteAccount(${idx})">Delete</button>
+                    </div>
+                `;
+                accountsContainer.appendChild(item);
+            });
+        }
+
+        async function switchAccount(index) {
+            const res = await fetch('/api/switch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ index })
+            });
+            const data = await res.json();
+            appendLog('Auth', data.message);
+            fetchAccounts();
+        }
+
+        async function deleteAccount(index) {
+            const res = await fetch('/api/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ index })
+            });
+            const data = await res.json();
+            appendLog('Auth', data.message);
+            fetchAccounts();
+        }
 
         function sendAction(action) {
             fetch(`/api/${action}`, { method: 'POST' })
@@ -138,6 +214,7 @@
                 const data = await res.json();
                 if (data.success) {
                     appendLog('Success', data.message);
+                    fetchAccounts();
                 } else {
                     appendLog('Error', data.message);
                 }
