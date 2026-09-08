@@ -5,61 +5,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniPIX Pro Dashboard</title>
+    <title>MiniPIX Pro Control Panel</title>
     <style>
         :root {
-            --bg-color: #0b0f19;
-            --card-bg: #131b2e;
-            --border-color: #1e293b;
+            --bg-color: #090d16;
+            --card-bg: #111827;
+            --border-color: #1f2937;
             --accent: #38bdf8;
             --success: #22c55e;
             --danger: #ef4444;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Inter', system-ui, sans-serif; background-color: var(--bg-color); color: var(--text-main); display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
-        .dashboard { width: 100%; max-width: 650px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; padding: 30px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7); }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; }
-        .header h1 { font-size: 22px; font-weight: 600; color: var(--accent); }
-        .badge { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; padding: 6px 14px; border-radius: 20px; background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+        .dashboard { width: 100%; max-width: 650px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; padding: 25px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; }
+        .header h1 { font-size: 18px; font-weight: 600; color: var(--accent); }
+        .badge { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 5px 10px; border-radius: 20px; background: rgba(239, 68, 68, 0.1); color: var(--danger); }
         .badge.active { background: rgba(34, 197, 94, 0.1); color: var(--success); }
-        .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: pulse 2s infinite; }
+        .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: pulse 2s infinite; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
-        .controls { display: flex; gap: 15px; margin-bottom: 25px; }
-        .btn { flex: 1; padding: 12px; border: none; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s; }
-        .btn-start { background: var(--success); color: white; }
-        .btn-start:hover { opacity: 0.9; }
-        .btn-stop { background: var(--danger); color: white; }
-        .btn-stop:hover { opacity: 0.9; }
-        .section-title { font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
-        .terminal { background: #04060c; border: 1px solid var(--border-color); border-radius: 10px; padding: 15px; height: 280px; overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 13px; color: #38bdf8; display: flex; flex-direction: column; gap: 8px; }
-        .footer { margin-top: 20px; text-align: center; font-size: 12px; color: var(--text-muted); }
+        
+        .grid-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .btn { padding: 10px; border: none; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; color: white; background: #1e293b; border: 1px solid var(--border-color); text-align: center; }
+        .btn:hover { background: #334155; }
+        .btn-start { background: var(--success); border: none; }
+        .btn-stop { background: var(--danger); border: none; }
+        .btn-full { grid-column: span 2; background: #0284c7; border: none; }
+
+        .section-title { font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+        .terminal { background: #030712; border: 1px solid var(--border-color); border-radius: 10px; padding: 12px; height: 220px; overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 12px; color: #38bdf8; display: flex; flex-direction: column; gap: 6px; }
+        .footer { margin-top: 15px; text-align: center; font-size: 11px; color: var(--text-muted); }
     </style>
 </head>
 <body>
     <div class="dashboard">
         <div class="header">
-            <h1>MiniPIX Pro Automation</h1>
+            <h1>MiniPIX Web Control Panel</h1>
             <div id="status-badge" class="badge">
                 <span class="dot"></span> <span id="status-text">Disconnected</span>
             </div>
         </div>
 
-        <div class="controls">
-            <button class="btn btn-start" onclick="startAutomation()">🚀 Start Automation</button>
-            <button class="btn btn-stop" onclick="stopAutomation()">🛑 Stop Automation</button>
+        <div class="grid-controls">
+            <button class="btn btn-start" onclick="triggerAction('start')">🚀 Start Auto-Play</button>
+            <button class="btn btn-stop" onclick="triggerAction('stop')">🛑 Stop Engine</button>
+            <button class="btn btn-full" onclick="promptLogin()">📱 Login / Add Account via Phone</button>
         </div>
 
         <div>
-            <div class="section-title">Live Engine & AI Worker Logs</div>
+            <div class="section-title">Live Execution & Worker Activity Logs</div>
             <div id="terminal-logs" class="terminal">
-                <div>[System] Dashboard loaded successfully. Connecting to backend...</div>
+                <div>[System] Web Dashboard initialized successfully.</div>
             </div>
         </div>
 
         <div class="footer">
-            High-Performance Go Engine & DeepSeek AI Integration
+            Pure Web Automation Panel & Go Backend
         </div>
     </div>
 
@@ -92,18 +95,19 @@
             }
         };
 
-        function startAutomation() {
-            fetch('/api/start', { method: 'POST' })
+        function triggerAction(action) {
+            fetch(`/api/${action}`, { method: 'POST' })
                 .then(res => res.json())
-                .then(data => appendLog('API', data.message))
-                .catch(err => appendLog('Error', 'Failed to start automation'));
+                .then(data => appendLog('API', data.message || 'Action executed'))
+                .catch(err => appendLog('Error', 'Request failed'));
         }
 
-        function stopAutomation() {
-            fetch('/api/stop', { method: 'POST' })
-                .then(res => res.json())
-                .then(data => appendLog('API', data.message))
-                .catch(err => appendLog('Error', 'Failed to stop automation'));
+        function promptLogin() {
+            const phone = prompt("Enter your 10-digit mobile number (+91):");
+            if (phone) {
+                appendLog('Auth', `Requesting OTP for +91${phone}...`);
+                // Aap yahan backend API call add kar sakte hain jo OTP generate karegi
+            }
         }
 
         function appendLog(source, message) {
